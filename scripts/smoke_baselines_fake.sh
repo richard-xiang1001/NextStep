@@ -154,6 +154,11 @@ echo "[smoke] OUT=${OUT_ROOT}"
 echo "[smoke] NEXTSTEP_FAKE_INVALID_RATE=${NEXTSTEP_FAKE_INVALID_RATE}"
 echo
 
+if [[ "${NEXTSTEP_FAKE_INVALID_RATE}" == "0.25" ]]; then
+  echo "[smoke] intentional failure for CI gate validation (invalid_rate=0.25)" >&2
+  exit 1
+fi
+
 run_one "greedy"
 run_one "rm_bon" "--num_samples" "4" "--rm_checkpoint" "fake_ckpt"
 run_one "rm_mcts" "--rm_checkpoint" "fake_ckpt"
