@@ -182,6 +182,8 @@ class LLMPolicyClient:
         self.stop = config.llm_stop
         self.reasoning_effort = config.llm_reasoning_effort
         self.tools_enabled = config.llm_tools_enabled
+        self.openai_timeout_sec = float(os.getenv("OPENAI_TIMEOUT_SEC", "60"))
+        self.openai_max_retries = int(os.getenv("OPENAI_MAX_RETRIES", "2"))
         self._openai_client = None
         self._anthropic_client = None
 
@@ -192,7 +194,12 @@ class LLMPolicyClient:
             from openai import OpenAI
 
             base_url = os.getenv("OPENAI_BASE_URL")
-            self._openai_client = OpenAI(api_key=api_key, base_url=base_url)
+            self._openai_client = OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=self.openai_timeout_sec,
+                max_retries=self.openai_max_retries,
+            )
             return
 
         if self.provider == "anthropic":
@@ -222,6 +229,27 @@ class LLMPolicyClient:
             "seed": seed,
         }
 
+    @staticmethod
+    def _model_error_result(prompt: str, request_anchor: Dict[str, Any], error: Exception, latency_ms: float) -> LLMResult:
+        # Fail-closed action so transient provider outages do not kill full experiment runs.
+        fallback_text = json.dumps({"action": "finish", "args": {}}, ensure_ascii=True)
+        prompt_tokens = max(1, len(prompt) // 4)
+        completion_tokens = max(1, len(fallback_text) // 4)
+        return LLMResult(
+            text=fallback_text,
+            usage_tokens=prompt_tokens + completion_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            latency_ms=max(0.0, latency_ms),
+            request=request_anchor,
+            response={
+                "provider_error": True,
+                "error_type": type(error).__name__,
+                "error": str(error),
+                "fallback_action": "finish",
+            },
+        )
+
     def generate(self, prompt: str, temperature: float, seed: Optional[int] = None) -> LLMResult:
         """Generate one action response from the configured provider."""
         request_anchor = self._request_anchor(temperature=temperature, seed=seed)
@@ -240,16 +268,20 @@ class LLMPolicyClient:
             if self.reasoning_effort:
                 kwargs["reasoning_effort"] = self.reasoning_effort
             start = time.perf_counter()
-            resp = self._openai_client.chat.completions.create(
-                model=self.model,
-                temperature=temperature,
-                max_tokens=self.max_output_tokens,
-                messages=[
-                    {"role": "system", "content": ACTION_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                **kwargs,
-            )
+            try:
+                resp = self._openai_client.chat.completions.create(
+                    model=self.model,
+                    temperature=temperature,
+                    max_tokens=self.max_output_tokens,
+                    messages=[
+                        {"role": "system", "content": ACTION_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    **kwargs,
+                )
+            except Exception as e:
+                latency_ms = (time.perf_counter() - start) * 1000.0
+                return self._model_error_result(prompt=prompt, request_anchor=request_anchor, error=e, latency_ms=latency_ms)
             latency_ms = max(0.0, (time.perf_counter() - start) * 1000.0)
             content = resp.choices[0].message.content or ""
             usage = getattr(resp, "usage", None)
@@ -282,14 +314,18 @@ class LLMPolicyClient:
         if self.stop:
             kwargs["stop_sequences"] = [self.stop]
         start = time.perf_counter()
-        resp = self._anthropic_client.messages.create(
-            model=self.model,
-            system=ACTION_SYSTEM_PROMPT,
-            temperature=temperature,
-            max_tokens=self.max_output_tokens,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        try:
+            resp = self._anthropic_client.messages.create(
+                model=self.model,
+                system=ACTION_SYSTEM_PROMPT,
+                temperature=temperature,
+                max_tokens=self.max_output_tokens,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+        except Exception as e:
+            latency_ms = (time.perf_counter() - start) * 1000.0
+            return self._model_error_result(prompt=prompt, request_anchor=request_anchor, error=e, latency_ms=latency_ms)
         latency_ms = max(0.0, (time.perf_counter() - start) * 1000.0)
         content_parts = getattr(resp, "content", []) or []
         text = "".join(getattr(part, "text", "") for part in content_parts)
