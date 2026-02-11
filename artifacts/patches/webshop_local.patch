@@ -1,0 +1,266 @@
+diff --git a/web_agent_site/engine/engine.py b/web_agent_site/engine/engine.py
+index 2e5eee3..8d9980f 100644
+--- a/web_agent_site/engine/engine.py
++++ b/web_agent_site/engine/engine.py
+@@ -7,13 +7,29 @@ import random
+ from collections import defaultdict
+ from ast import literal_eval
+ from decimal import Decimal
++from dataclasses import dataclass
+ 
+-import cleantext
+ from tqdm import tqdm
+-from rank_bm25 import BM25Okapi
+-from flask import render_template_string
+ from rich import print
+-from pyserini.search.lucene import LuceneSearcher
++
++try:
++    from flask import render_template_string
++except ImportError:
++    from jinja2 import Template
++
++    def _fallback_url_for(endpoint, **values):
++        if endpoint == 'static':
++            filename = values.get('filename', '')
++            return f'/static/{filename}'
++        return f'/{endpoint}'
++
++    def render_template_string(template, **kwargs):
++        return Template(template).render(url_for=_fallback_url_for, **kwargs)
++
++try:
++    from pyserini.search.lucene import LuceneSearcher
++except ImportError:
++    LuceneSearcher = None
+ 
+ from web_agent_site.utils import (
+     BASE_DIR,
+@@ -41,6 +57,53 @@ ACTION_TO_TEMPLATE = {
+     'Attributes': 'attributes_page.html',
+ }
+ 
++
++@dataclass
++class _SimpleHit:
++    docid: str
++
++
++class _SimpleDoc:
++    def __init__(self, asin):
++        self._asin = asin
++
++    def raw(self):
++        return json.dumps({'id': self._asin})
++
++
++class _SimpleSearcher:
++    """Pure-Python fallback searcher used when pyserini is unavailable."""
++
++    def __init__(self, all_products):
++        self._entries = []
++        for product in all_products:
++            asin = product.get('asin')
++            if not asin:
++                continue
++            text = ' '.join([
++                str(product.get('Title', '')),
++                str(product.get('Description', '')),
++                ' '.join(product.get('BulletPoints', [])),
++                ' '.join(str(v) for values in product.get('options', {}).values() for v in values),
++            ]).lower()
++            tokens = set(re.findall(r'[a-z0-9]+', text))
++            self._entries.append((asin, tokens))
++
++    def search(self, keywords, k=SEARCH_RETURN_N):
++        q_tokens = set(re.findall(r'[a-z0-9]+', keywords.lower()))
++        if not q_tokens:
++            return []
++        scored = []
++        for asin, tokens in self._entries:
++            overlap = len(q_tokens & tokens)
++            if overlap:
++                scored.append((overlap, asin))
++        scored.sort(key=lambda x: (-x[0], x[1]))
++        return [_SimpleHit(docid=asin) for _, asin in scored[:k]]
++
++    def doc(self, docid):
++        return _SimpleDoc(docid)
++
+ def map_action_to_html(action, **kwargs):
+     action_name, action_arg = parse_action(action)
+     if action_name == 'start':
+@@ -192,7 +255,7 @@ def generate_product_prices(all_products):
+     return product_prices
+ 
+ 
+-def init_search_engine(num_products=None):
++def init_search_engine(num_products=None, all_products=None):
+     if num_products == 100:
+         indexes = 'indexes_100'
+     elif num_products == 1000:
+@@ -203,6 +266,11 @@ def init_search_engine(num_products=None):
+         indexes = 'indexes'
+     else:
+         raise NotImplementedError(f'num_products being {num_products} is not supported yet.')
++    if LuceneSearcher is None:
++        print('[yellow]pyserini not found; using fallback in-memory search.[/yellow]')
++        if all_products is None:
++            raise RuntimeError('Fallback search requires all_products to be loaded.')
++        return _SimpleSearcher(all_products)
+     search_engine = LuceneSearcher(os.path.join(BASE_DIR, f'../search_engine/{indexes}'))
+     return search_engine
+ 
+diff --git a/web_agent_site/engine/goal.py b/web_agent_site/engine/goal.py
+index 09ad268..f655424 100644
+--- a/web_agent_site/engine/goal.py
++++ b/web_agent_site/engine/goal.py
+@@ -5,11 +5,42 @@ import itertools
+ import random
+ import spacy
+ from collections import defaultdict
++from difflib import SequenceMatcher
+ from rich import print
+-from thefuzz import fuzz
++
++try:
++    from thefuzz import fuzz
++except ImportError:
++    class _FallbackFuzz:
++        @staticmethod
++        def token_set_ratio(a, b):
++            a_tokens = set(str(a).lower().split())
++            b_tokens = set(str(b).lower().split())
++            if not a_tokens and not b_tokens:
++                return 100
++            intersect = a_tokens & b_tokens
++            only_a = a_tokens - intersect
++            only_b = b_tokens - intersect
++
++            s_intersect = ' '.join(sorted(intersect))
++            s_a = ' '.join(sorted(intersect | only_a))
++            s_b = ' '.join(sorted(intersect | only_b))
++
++            score = max(
++                SequenceMatcher(None, s_intersect, s_a).ratio(),
++                SequenceMatcher(None, s_intersect, s_b).ratio(),
++                SequenceMatcher(None, s_a, s_b).ratio(),
++            )
++            return int(round(score * 100))
++
++    fuzz = _FallbackFuzz()
+ from web_agent_site.engine.normalize import normalize_color
+ 
+-nlp = spacy.load("en_core_web_sm")
++try:
++    nlp = spacy.load("en_core_web_sm")
++except Exception:
++    # Offline fallback when the spaCy small model is not installed.
++    nlp = spacy.blank("en")
+ 
+ PRICE_RANGE = [10.0 * i for i in range(1, 100)]
+ 
+diff --git a/web_agent_site/envs/__init__.py b/web_agent_site/envs/__init__.py
+index 2f7ab62..c4b912c 100644
+--- a/web_agent_site/envs/__init__.py
++++ b/web_agent_site/envs/__init__.py
+@@ -1,14 +1,18 @@
+ from gym.envs.registration import register
+ 
+-from web_agent_site.envs.web_agent_site_env import WebAgentSiteEnv
+ from web_agent_site.envs.web_agent_text_env import WebAgentTextEnv
++try:
++    from web_agent_site.envs.web_agent_site_env import WebAgentSiteEnv
++except Exception:
++    WebAgentSiteEnv = None
+ 
+-register(
+-  id='WebAgentSiteEnv-v0',
+-  entry_point='web_agent_site.envs:WebAgentSiteEnv',
+-)
++if WebAgentSiteEnv is not None:
++    register(
++      id='WebAgentSiteEnv-v0',
++      entry_point='web_agent_site.envs:WebAgentSiteEnv',
++    )
+ 
+ register(
+   id='WebAgentTextEnv-v0',
+   entry_point='web_agent_site.envs:WebAgentTextEnv',
+-)
+\ No newline at end of file
++)
+diff --git a/web_agent_site/envs/web_agent_text_env.py b/web_agent_site/envs/web_agent_text_env.py
+index 9c8d27b..e325b67 100644
+--- a/web_agent_site/envs/web_agent_text_env.py
++++ b/web_agent_site/envs/web_agent_text_env.py
+@@ -3,14 +3,37 @@ import json
+ import random
+ import string
+ import time
+-import torch
++from contextlib import nullcontext
+ 
+ import numpy as np
+ 
+ from bs4 import BeautifulSoup
+ from bs4.element import Comment
+ from collections import defaultdict
+-from flask import Flask
++
++try:
++    import torch
++except ImportError:
++    torch = None
++
++try:
++    from flask import Flask
++except ImportError:
++    class Flask:
++        """Minimal Flask-compatible shim for offline/local text env usage."""
++        def __init__(self, *args, **kwargs):
++            pass
++
++        def route(self, *args, **kwargs):
++            def decorator(func):
++                return func
++            return decorator
++
++        def app_context(self):
++            return nullcontext()
++
++        def test_request_context(self):
++            return nullcontext()
+ from web_agent_site.engine.engine import (
+     load_products,
+     init_search_engine,
+@@ -74,6 +97,8 @@ class WebAgentTextEnv(gym.Env):
+         self.session = self.kwargs.get('session')
+         self.session_prefix = self.kwargs.get('session_prefix')
+         if self.kwargs.get('get_image', 0):
++            if torch is None:
++                raise ImportError('torch is required when get_image=1')
+             self.feats = torch.load(FEAT_CONV)
+             self.ids = torch.load(FEAT_IDS)
+             self.ids = {url: idx for idx, url in enumerate(self.ids)}
+@@ -157,6 +182,8 @@ class WebAgentTextEnv(gym.Env):
+                 image_idx = self.ids[image_url]
+                 image = self.feats[image_idx]
+                 return image
++        if torch is None:
++            return np.zeros(512, dtype=np.float32)
+         return torch.zeros(512)
+ 
+     def get_instruction_text(self):
+@@ -298,7 +325,10 @@ class SimServer:
+         self.base_url = base_url
+         self.all_products, self.product_item_dict, self.product_prices, _ = \
+             load_products(filepath=file_path, num_products=num_products, human_goals=human_goals)
+-        self.search_engine = init_search_engine(num_products=num_products)
++        self.search_engine = init_search_engine(
++            num_products=num_products,
++            all_products=self.all_products,
++        )
+         self.goals = get_goals(self.all_products, self.product_prices, human_goals)
+         self.show_attrs = show_attrs
+ 
