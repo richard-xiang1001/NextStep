@@ -13,11 +13,17 @@ WEBSHOP_PATH = os.path.join(
 if WEBSHOP_PATH not in sys.path:
     sys.path.insert(0, WEBSHOP_PATH)
 
+_WEBSHOP_IMPORT_ERROR: Optional[BaseException] = None
+
 try:
     from web_agent_site.envs import WebAgentTextEnv
 except ImportError:
+    _WEBSHOP_IMPORT_ERROR = sys.exc_info()[1]
     WebAgentTextEnv = None
-    print("Warning: WebShop not found. Install with: cd third_party/WebShop && bash setup.sh -d small")
+    print(
+        "Warning: WebShop import failed: "
+        f"{_WEBSHOP_IMPORT_ERROR}. Install with: cd third_party/WebShop && bash setup.sh -d small"
+    )
 
 from .base import Action, BaseEnvironment, Observation, StepResult
 
@@ -44,7 +50,8 @@ class WebShopEnvironment(BaseEnvironment):
 
         if WebAgentTextEnv is None:
             raise ImportError(
-                "WebShop not installed. Run: cd third_party/WebShop && bash setup.sh -d small"
+                "WebShop not installed. Run: cd third_party/WebShop && bash setup.sh -d small. "
+                f"Original import error: {_WEBSHOP_IMPORT_ERROR}"
             )
 
         self.observation_mode = config.get("observation_mode", "text")

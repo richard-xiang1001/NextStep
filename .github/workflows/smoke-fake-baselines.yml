@@ -40,6 +40,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install WebShop runtime deps for smoke
+        run: |
+          # WebShop text env imports these directly; install minimal runtime deps.
+          pip install "gym==0.26.2" "beautifulsoup4>=4.11,<5" "spacy>=3.7,<4"
+
       - name: Run fake smoke
         env:
           NEXTSTEP_FAKE_INVALID_RATE: ${{ matrix.invalid_rate }}
