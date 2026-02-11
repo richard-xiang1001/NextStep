@@ -1,0 +1,44 @@
+{
+  "version": "v0.1.0",
+  "benchmark_name": "WebShop",
+  "environment": {
+    "source_commit": "64fa2a5c15c7daa698b9ac93f5bb5437b634c9bd",
+    "source_url": "https://github.com/princeton-nlp/WebShop.git",
+    "install_method": "git_submodule",
+    "submodule_path": "third_party/WebShop",
+    "data_checksum": "manifest_sha256:d3f162674c1ec3220ce6ffdb1570889e416cdbe6297a5b03ad122ad07ed07318 (items_shuffle_1000.json,items_ins_v2_1000.json,items_human_ins.json)",
+    "wrapper_version": "v0.1.0",
+    "setup_command": "ls third_party/WebShop/data/items_shuffle_1000.json third_party/WebShop/data/items_ins_v2_1000.json third_party/WebShop/data/items_human_ins.json && source venv/bin/activate && python -c 'from src.env.webshop import create_webshop_env; from src.env.base import Action; env=create_webshop_env({\"max_steps\":80,\"num_products\":1000,\"observation_mode\":\"text\"}); obs,_=env.reset(task_id=\"0\"); step=env.step(Action(action_type=\"search\", args={\"query\":\"water bottle\"})); print(len(obs.text),step.reward,step.done)'"
+  },
+  "task_spec": {
+    "domain": "ecommerce",
+    "observation_type": "text_html",
+    "action_space": "discrete",
+    "max_steps": 80
+  },
+  "action_space": {
+    "pruning_enabled": false,
+    "allowed_actions": null,
+    "pruning_rules": []
+  },
+  "budget_limits": {
+    "B_step": 80,
+    "B_tok": 6000,
+    "B_call": 12,
+    "max_tokens_per_call": 512,
+    "T_max": 6
+  },
+  "cost_weights": {
+    "alpha": 0.6,
+    "beta": 0.3,
+    "gamma": 0.1
+  },
+  "pareto_budgets": {
+    "budget_points": [2000, 4000, 6000],
+    "fixed_B_step": 80,
+    "fixed_B_call": 12
+  },
+  "parallelism": {
+    "MAX_PARALLEL_CALLS": 2
+  }
+}

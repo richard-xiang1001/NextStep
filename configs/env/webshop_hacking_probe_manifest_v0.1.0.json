@@ -1,0 +1,18 @@
+{
+  "version": "v0.1.0",
+  "description": "Frozen hacking probe task sets for diagnostics only",
+  "sets": {
+    "S_probe_train": {
+      "source_split": "S_policy_train",
+      "task_ids": []
+    },
+    "S_probe_dev": {
+      "source_split": "S_policy_dev",
+      "task_ids": []
+    }
+  },
+  "usage_policy": {
+    "diagnostics_only": true,
+    "allowed_for_final_model_selection": false
+  }
+}
