@@ -14,6 +14,12 @@ if WEBSHOP_PATH not in sys.path:
     sys.path.insert(0, WEBSHOP_PATH)
 
 _WEBSHOP_IMPORT_ERROR: Optional[BaseException] = None
+_ALLOW_WEBSHOP_STUB = os.getenv("NEXTSTEP_ALLOW_WEBSHOP_STUB", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 try:
     from web_agent_site.envs import WebAgentTextEnv
@@ -26,6 +32,49 @@ except ImportError:
     )
 
 from .base import Action, BaseEnvironment, Observation, StepResult
+
+
+class _StubWebAgentTextEnv:
+    """Minimal offline stub used only for fake smoke in CI."""
+
+    def __init__(self, observation_mode: str = "text", num_products: int = 1000, **kwargs: Any):
+        self.observation_mode = observation_mode
+        self.num_products = num_products
+        self.kwargs = kwargs
+        self.num_tasks = 1
+        self.instruction_text = "Find a product that satisfies the query."
+        self.instruction = self.instruction_text
+        self.goal_met = False
+        self._step = 0
+
+    def reset(self, session: Optional[int] = None):
+        self._step = 0
+        self.goal_met = False
+        sid = 0 if session is None else int(session)
+        obs = (
+            f"[stub-webshop] session={sid} step=0 "
+            "Available actions: search[query], click[element_key], finish"
+        )
+        return obs, {"task_id": sid, "stub_env": True}
+
+    def step(self, action: str):
+        self._step += 1
+        done = False
+        reward = 0.0
+        if str(action).startswith("finish"):
+            done = True
+            self.goal_met = True
+            reward = 1.0
+        obs = f"[stub-webshop] step={self._step} action={action}"
+        return obs, reward, done, {"stub_env": True}
+
+
+if WebAgentTextEnv is None and _ALLOW_WEBSHOP_STUB:
+    print(
+        "[WebShop] Falling back to stub env because import failed: "
+        f"{_WEBSHOP_IMPORT_ERROR}"
+    )
+    WebAgentTextEnv = _StubWebAgentTextEnv
 
 
 class WebShopEnvironment(BaseEnvironment):
