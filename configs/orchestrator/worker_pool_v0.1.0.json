@@ -1,0 +1,38 @@
+{
+  "version": "v0.1.0",
+  "description": "Frozen worker pool identities for orchestrator experiments",
+  "workers": [
+    {
+      "worker_id": "w1",
+      "model_id": "REPLACE_WITH_MODEL_ID_1",
+      "model_version": "REPLACE_WITH_VERSION_OR_DATE",
+      "provider": "REPLACE_WITH_PROVIDER",
+      "role_hint": "general_reasoning"
+    },
+    {
+      "worker_id": "w2",
+      "model_id": "REPLACE_WITH_MODEL_ID_2",
+      "model_version": "REPLACE_WITH_VERSION_OR_DATE",
+      "provider": "REPLACE_WITH_PROVIDER",
+      "role_hint": "tool_use"
+    },
+    {
+      "worker_id": "w3",
+      "model_id": "REPLACE_WITH_MODEL_ID_3",
+      "model_version": "REPLACE_WITH_VERSION_OR_DATE",
+      "provider": "REPLACE_WITH_PROVIDER",
+      "role_hint": "planning"
+    },
+    {
+      "worker_id": "w4",
+      "model_id": "REPLACE_WITH_MODEL_ID_4",
+      "model_version": "REPLACE_WITH_VERSION_OR_DATE",
+      "provider": "REPLACE_WITH_PROVIDER",
+      "role_hint": "verification"
+    }
+  ],
+  "training_randomization": {
+    "sample_size_per_episode": 3,
+    "pool_size": 4
+  }
+}

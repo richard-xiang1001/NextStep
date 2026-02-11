@@ -1,0 +1,41 @@
+{
+  "version": "v0.1.0",
+  "anchors": [
+    {
+      "id": "ANCHOR_1",
+      "description": "Terminal output must include final answer field with required entity (WebShop item id/title).",
+      "required_fields": [
+        "final_item_id_or_title"
+      ]
+    },
+    {
+      "id": "ANCHOR_2",
+      "description": "Trajectory must include at least one goal-directed action from the critical action list.",
+      "critical_actions": [
+        "search",
+        "open_item_page",
+        "click_option",
+        "add_to_cart",
+        "checkout"
+      ]
+    },
+    {
+      "id": "ANCHOR_3",
+      "description": "Terminal output must include explicit completion/status statement.",
+      "required_fields": [
+        "completion_status"
+      ]
+    }
+  ],
+  "action_name_normalization": {
+    "lowercase": true,
+    "trim_whitespace": true,
+    "replace_space_with_underscore": true,
+    "alias_map": {
+      "open item": "open_item_page",
+      "open product page": "open_item_page",
+      "select option": "click_option",
+      "buy now": "checkout"
+    }
+  }
+}

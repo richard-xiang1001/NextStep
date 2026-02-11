@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data and models (large files)
+data/rm/raw/*.json
+data/rm/raw/*.jsonl
+data/rm/processed/*.pkl
+artifacts/models/*.pt
+artifacts/models/*.bin
+artifacts/models/*.safetensors
+results/exp_logs/*/trajectories/*.jsonl
+
+# Logs
+*.log
+logs/
+*.out
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+tmp/
+temp/
+
+# Local run outputs
+results/
+
+# But keep important configs and docs
+!docs/patches/*.md
+!configs/**/*.json
+!docs/**/*.md
+
+# Results (keep structure but not large data)
+results/exp_logs/*/plots/*.png
+results/exp_logs/*/plots/*.pdf

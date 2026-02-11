@@ -1,0 +1,61 @@
+{
+  "version": "v0.1.0",
+  "algorithm": "GRPO",
+  "model": {
+    "base_model": "REPLACE_WITH_BASE_MODEL_ID",
+    "architecture": "decoder-only",
+    "max_sequence_length": 4096
+  },
+  "reference_policy": {
+    "checkpoint": "orchestrator_ref_v0.1.0",
+    "type": "format_SFT"
+  },
+  "training": {
+    "optimizer": "AdamW",
+    "lr": 1e-5,
+    "batch_queries_per_update": 4,
+    "rollout_k": 16,
+    "adv_norm": "z_score",
+    "adv_clip": [-5, 5],
+    "grad_clip_norm": 1.0
+  },
+  "kl_regularization": {
+    "kl_coef_init": 0.02,
+    "kl_coef_schedule": "linear_warmup_then_constant",
+    "warmup_ratio": 0.3,
+    "kl_target": 0.05
+  },
+  "reward_function": {
+    "parse_ok_weight": 1.0,
+    "rm_weight": 1.0,
+    "lambda_c": 0.1,
+    "lambda_l": 0.01
+  },
+  "workflow_format": {
+    "output_schema": "strict_json",
+    "max_steps": 6,
+    "required_fields": [
+      "subtask",
+      "worker_id",
+      "access_list"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "workflow": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "subtask": {"type": "string"},
+            "worker_id": {"type": "string"},
+            "access_list": {"type": "array", "items": {"type": "string"}}
+          },
+          "required": ["subtask", "worker_id", "access_list"]
+        }
+      }
+    },
+    "required": ["workflow"]
+  }
+}

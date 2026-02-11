@@ -1,0 +1,61 @@
+{
+  "version": "v0.1.0",
+  "model": {
+    "architecture": "REPLACE_WITH_MODEL_ARCH",
+    "base_model": "REPLACE_WITH_BASE_MODEL_ID",
+    "max_sequence_length": 4096
+  },
+  "data": {
+    "train_split": "S_rm_train",
+    "dev_split": "S_rm_dev",
+    "max_positive_examples": 50000,
+    "negatives_per_positive": 3,
+    "hard_negative_ratio": 1.0
+  },
+  "hard_negative_generation": {
+    "protocol": "NegGen-v0.1",
+    "mix_ratio": {
+      "rule_based": 0.5,
+      "model_based": 0.5
+    },
+    "rule_based_edits": [
+      "drop_critical_step",
+      "replace_key_entity",
+      "terminate_early"
+    ],
+    "model_based_rewrites": [
+      "fluent_paraphrase",
+      "subtle_contradiction"
+    ],
+    "noise_filter": {
+      "replay_check": true,
+      "judge_check": true
+    }
+  },
+  "training": {
+    "loss": "pairwise_ranking",
+    "optimizer": "AdamW",
+    "learning_rate": 2e-5,
+    "batch_size": 32,
+    "gradient_accumulation_steps": 4,
+    "max_epochs": 3,
+    "warmup_ratio": 0.1,
+    "weight_decay": 0.01
+  },
+  "dev_metrics": [
+    "pairwise_auc",
+    "pairwise_accuracy",
+    "spearman_correlation"
+  ],
+  "ensemble": {
+    "n_models": 3,
+    "aggregation": "min",
+    "seed_variation": true
+  },
+  "trajectory_summary_schema": {
+    "max_chars_per_step": 600,
+    "max_steps": 6,
+    "max_env_trace_entries": 80,
+    "max_chars_obs_action": 240
+  }
+}

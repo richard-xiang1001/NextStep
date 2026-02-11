@@ -1,0 +1,59 @@
+name: smoke-fake-baselines
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.invalid_rate }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OUT_ROOT: results/smoke_fake/${{ github.run_id }}/${{ matrix.invalid_rate }}
+    strategy:
+      fail-fast: false
+      matrix:
+        invalid_rate: ["0.0", "0.25"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f pyproject.toml ]; then
+            pip install -e .
+          else
+            echo "No requirements.txt or pyproject.toml found; refusing to run." >&2
+            exit 1
+          fi
+
+      - name: Run fake smoke
+        env:
+          NEXTSTEP_FAKE_INVALID_RATE: ${{ matrix.invalid_rate }}
+          NEXTSTEP_FAKE_FORCE_STEP0_INVALID: ${{ matrix.invalid_rate != '0.0' && '1' || '0' }}
+          SPLIT: "S_smoke_1"
+          SEED: "42"
+          MAX_STEPS: "20"
+          MAX_TOK: "800"
+          MAX_CALLS: "6"
+        run: |
+          chmod +x scripts/smoke_baselines_fake.sh
+          scripts/smoke_baselines_fake.sh
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke_fake_artifacts_invalid_${{ matrix.invalid_rate }}
+          path: ${{ env.OUT_ROOT }}
